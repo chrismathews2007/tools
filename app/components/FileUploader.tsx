@@ -2,6 +2,10 @@
 
 import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Download, Trash2 } from "lucide-react"
+import JSZip from "jszip"
 
 interface ConversionResult {
   fileName: string
@@ -11,30 +15,36 @@ interface ConversionResult {
 }
 
 export default function FileUploader() {
-  const [file, setFile] = useState<File | null>(null)
-  const [result, setResult] = useState<ConversionResult | null>(null)
+  const [files, setFiles] = useState<File[]>([])
+  const [results, setResults] = useState<ConversionResult[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isConverting, setIsConverting] = useState(false)
-  const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null)
+  const [progress, setProgress] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!file) {
-      setError("Please select a file to convert")
+    if (files.length === 0) {
+      setError("Please select at least one file to convert")
       return
     }
 
     setIsConverting(true)
     setError(null)
+    setResults([])
+    setProgress(0)
 
     try {
-      const result = await convertToWebP(file)
-      setResult(result)
+      const convertedResults: ConversionResult[] = []
+      for (let i = 0; i < files.length; i++) {
+        const result = await convertToWebP(files[i])
+        convertedResults.push(result)
+        setProgress(((i + 1) / files.length) * 100)
+      }
+      setResults(convertedResults)
     } catch (err) {
       console.error("Conversion error:", err)
-      setError(`Error converting file: ${err instanceof Error ? err.message : "Unknown error"}`)
-      setResult(null)
+      setError(`Error converting files: ${err instanceof Error ? err.message : "Unknown error"}`)
     } finally {
       setIsConverting(false)
     }
@@ -82,7 +92,6 @@ export default function FileUploader() {
       }
       img.onerror = () => reject(new Error("Image loading failed"))
       img.src = URL.createObjectURL(file)
-      setOriginalImageUrl(img.src)
     })
   }
 
@@ -97,18 +106,46 @@ export default function FileUploader() {
     return `${savings}%`
   }
 
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files || [])
+    const validFiles = selectedFiles.filter((file) => file.size <= 5 * 1024 * 1024)
+    if (validFiles.length !== selectedFiles.length) {
+      setError("Some files exceeded the 5MB limit and were not added")
+    } else {
+      setError(null)
+    }
+    setFiles((prevFiles) => [...prevFiles, ...validFiles])
+  }
+
+  const removeFile = (index: number) => {
+    setFiles((prevFiles) => prevFiles.filter((_, i) => i !== index))
+  }
+
+  const downloadAllAsZip = async () => {
+    const zip = new JSZip()
+
+    results.forEach((result) => {
+      const data = result.dataUrl.split(",")[1]
+      zip.file(result.fileName, data, { base64: true })
+    })
+
+    const content = await zip.generateAsync({ type: "blob" })
+    const link = document.createElement("a")
+    link.href = URL.createObjectURL(content)
+    link.download = "converted_webp_images.zip"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   return (
-    <div className="w-full max-w-3xl">
+    <div className="w-full max-w-4xl">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex items-center space-x-4">
           <div className="flex-grow">
-            {file ? (
-              <p className="text-sm text-gray-500">
-                Selected file: {file.name} ({formatFileSize(file.size)})
-              </p>
-            ) : (
-              <p className="text-sm text-gray-500">No file selected (MAX. 5MB)</p>
-            )}
+            <p className="text-sm text-gray-500">
+              {files.length === 0 ? "No files selected (MAX. 5MB per file)" : `${files.length} file(s) selected`}
+            </p>
           </div>
           <label
             htmlFor="file-upload"
@@ -129,7 +166,7 @@ export default function FileUploader() {
                   d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                 ></path>
               </svg>
-              <span className="font-medium text-gray-600">Select a file</span>
+              <span className="font-medium text-gray-600">Select files</span>
             </span>
             <input
               id="file-upload"
@@ -137,29 +174,32 @@ export default function FileUploader() {
               type="file"
               className="hidden"
               accept="image/*"
-              onChange={(e) => {
-                const selectedFile = e.target.files?.[0]
-                if (selectedFile && selectedFile.size > 5 * 1024 * 1024) {
-                  setError("File size exceeds 5MB limit")
-                  setFile(null)
-                  setOriginalImageUrl(null)
-                } else {
-                  setFile(selectedFile || null)
-                  setError(null)
-                  if (selectedFile) {
-                    const url = URL.createObjectURL(selectedFile)
-                    setOriginalImageUrl(url)
-                  } else {
-                    setOriginalImageUrl(null)
-                  }
-                  console.log(`File selected: ${selectedFile?.name}, size: ${selectedFile?.size} bytes`)
-                }
-              }}
-              aria-label="Upload an image file"
+              multiple
+              onChange={handleFileChange}
+              aria-label="Upload image files"
             />
           </label>
         </div>
-        <Button type="submit" disabled={isConverting || !file} aria-busy={isConverting} className="w-full">
+        {files.length > 0 && (
+          <ul className="mt-4 space-y-2">
+            {files.map((file, index) => (
+              <li key={index} className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">
+                  {file.name} ({formatFileSize(file.size)})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(index)}
+                  className="text-red-500 hover:text-red-700"
+                  aria-label={`Remove ${file.name}`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Button type="submit" disabled={isConverting || files.length === 0} aria-busy={isConverting} className="w-full">
           {isConverting ? "Converting..." : "Convert to WebP"}
         </Button>
       </form>
@@ -170,45 +210,48 @@ export default function FileUploader() {
         </p>
       )}
 
-      {(originalImageUrl || result) && (
+      {isConverting && (
+        <div className="mt-4">
+          <Progress value={progress} className="w-full" />
+          <p className="text-sm text-gray-600 mt-2">Converting: {progress.toFixed(0)}% complete</p>
+        </div>
+      )}
+
+      {results.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-2xl font-bold mb-4">Image Comparison</h2>
-          <div className="flex flex-col md:flex-row gap-8">
-            <div className="flex-1">
-              <h3 className="text-xl font-semibold mb-2">Original Image</h3>
-              {originalImageUrl && (
-                <img
-                  src={originalImageUrl || "/placeholder.svg"}
-                  alt="Original"
-                  className="max-w-full h-auto rounded-lg shadow-md"
-                />
-              )}
-              {file && <p className="mt-2 text-sm text-gray-600">Size: {formatFileSize(file.size)}</p>}
-            </div>
-            <div className="flex-1">
-              <h3 className="text-xl font-semibold mb-2">Converted WebP</h3>
-              {result && (
-                <>
-                  <img
-                    src={result.dataUrl || "/placeholder.svg"}
-                    alt="Converted WebP"
-                    className="max-w-full h-auto rounded-lg shadow-md"
-                  />
-                  <p className="mt-2 text-sm text-gray-600">Size: {formatFileSize(result.convertedSize)}</p>
-                  <p className="text-sm text-green-600">
-                    Size reduction: {calculateSavings(result.originalSize, result.convertedSize)}
-                  </p>
-                  <a
-                    href={result.dataUrl}
-                    download={result.fileName}
-                    className="mt-4 inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                  >
-                    Download WebP
-                  </a>
-                </>
-              )}
-            </div>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold">Conversion Results</h2>
+            <Button onClick={downloadAllAsZip} className="flex items-center space-x-2">
+              <Download className="w-4 h-4" />
+              <span>Download All as ZIP</span>
+            </Button>
           </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>File Name</TableHead>
+                <TableHead>Original Size</TableHead>
+                <TableHead>Converted Size</TableHead>
+                <TableHead>Size Reduction</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {results.map((result, index) => (
+                <TableRow key={index}>
+                  <TableCell>{result.fileName}</TableCell>
+                  <TableCell>{formatFileSize(result.originalSize)}</TableCell>
+                  <TableCell>{formatFileSize(result.convertedSize)}</TableCell>
+                  <TableCell>{calculateSavings(result.originalSize, result.convertedSize)}</TableCell>
+                  <TableCell>
+                    <a href={result.dataUrl} download={result.fileName} className="text-blue-500 hover:text-blue-700">
+                      Download
+                    </a>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
 

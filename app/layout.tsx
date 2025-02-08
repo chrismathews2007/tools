@@ -1,12 +1,13 @@
 import "./globals.css"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
+import type React from "react"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "WebP Converter with Side-by-Side Comparison",
-  description: "Convert your images to WebP format and compare file sizes side by side",
+  title: "Multiple WebP Converter with ZIP Download",
+  description: "Convert multiple images to WebP format, compare file sizes, and download as ZIP",
 }
 
 export default function RootLayout({
