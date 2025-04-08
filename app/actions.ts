@@ -12,7 +12,7 @@ export async function convertToWebP(formData: FormData) {
     const buffer = Buffer.from(await file.arrayBuffer())
     console.log(`Received file: ${file.name}, size: ${buffer.length} bytes`)
 
-    const webpBuffer = await sharp(buffer).webp({ quality: 60 }).toBuffer()
+    const webpBuffer = await sharp(buffer).webp({ quality: 40 }).toBuffer()
 
     console.log(`Converted to WebP, size: ${webpBuffer.length} bytes`)
 
