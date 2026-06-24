@@ -7,6 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Download, Trash2 } from "lucide-react"
 import JSZip from "jszip"
 
+const MAX_FILE_SIZE_MB = 25
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+
 interface ConversionResult {
   fileName: string
   dataUrl: string
@@ -108,9 +111,9 @@ export default function FileUploader() {
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.target.files || [])
-    const validFiles = selectedFiles.filter((file) => file.size <= 5 * 1024 * 1024)
+    const validFiles = selectedFiles.filter((file) => file.size <= MAX_FILE_SIZE_BYTES)
     if (validFiles.length !== selectedFiles.length) {
-      setError("Some files exceeded the 5MB limit and were not added")
+      setError(`Some files exceeded the ${MAX_FILE_SIZE_MB}MB limit and were not added`)
     } else {
       setError(null)
     }
@@ -144,7 +147,7 @@ export default function FileUploader() {
         <div className="flex items-center space-x-4">
           <div className="flex-grow">
             <p className="text-sm text-gray-500">
-              {files.length === 0 ? "No files selected (MAX. 5MB per file)" : `${files.length} file(s) selected`}
+              {files.length === 0 ? `No files selected (MAX. ${MAX_FILE_SIZE_MB}MB per file)` : `${files.length} file(s) selected`}
             </p>
           </div>
           <label
